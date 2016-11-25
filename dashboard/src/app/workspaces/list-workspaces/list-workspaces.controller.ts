@@ -9,6 +9,7 @@
  *   Codenvy, S.A. - initial API and implementation
  */
 'use strict';
+import {CheNamespaceRegistry} from '../../../components/api/namespace/che-namespace-registry.factory';
 
 /**
  * @ngdoc controller
@@ -18,21 +19,25 @@
  */
 export class ListWorkspacesCtrl {
 
+  cheNamespaceRegistry: CheNamespaceRegistry;
+  private ALL_NAMESPACES: string = 'All Teams';
+
   /**
    * Default constructor that is using resource
    * @ngInject for Dependency injection
    */
-  constructor(cheAPI, $q, $log, $mdDialog, cheNotification, cheWorkspace, $rootScope) {
+  constructor(cheAPI, $q, $log, $mdDialog, cheNotification, cheWorkspace, $rootScope, cheNamespaceRegistry: CheNamespaceRegistry) {
     this.cheAPI = cheAPI;
     this.$q = $q;
     this.$log = $log;
     this.$mdDialog = $mdDialog;
     this.cheNotification = cheNotification;
     this.cheWorkspace = cheWorkspace;
+    this.cheNamespaceRegistry = cheNamespaceRegistry;
 
     this.state = 'loading';
     this.isInfoLoading = true;
-    this.workspaceFilter = {config: {name: ''}};
+    this.workspaceFilter = {config: {name: ''}, namespace: ''};
 
     //Map of all workspaces with additional info by id:
     this.workspacesById = new Map();
@@ -46,6 +51,12 @@ export class ListWorkspacesCtrl {
     this.isBulkChecked = false;
     this.isNoSelected = true;
     $rootScope.showIDE = false;
+
+    this.namespaces = this.getNamespaces();
+
+    this.onFilterChanged = (value :  string) => {
+      this.workspaceFilter.namespace = (value === this.ALL_NAMESPACES) ? '' : value;
+    }
   }
 
   //Fetch current user's workspaces (where he is a member):
@@ -289,4 +300,16 @@ export class ListWorkspacesCtrl {
     return this.$mdDialog.show(confirm);
   }
 
+  /**
+   * Returns the list of available namespaces.
+   *
+   * @returns {Array} array of namespaces
+   */
+  getNamespaces() {
+    let namespaces = this.cheNamespaceRegistry.getNamespaces();
+    if (namespaces.length > 0) {
+      return [this.ALL_NAMESPACES].concat(namespaces);
+    }
+    return namespaces;
+  }
 }
