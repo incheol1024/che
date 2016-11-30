@@ -37,7 +37,9 @@ export class ListWorkspacesCtrl {
 
     this.state = 'loading';
     this.isInfoLoading = true;
-    this.workspaceFilter = {config: {name: ''}, namespace: ''};
+    this.isExactMatch = false;
+    this.workspaceFilter = {config: {name: ''}};
+    this.namespaceFilter = {namespace: ''};
 
     //Map of all workspaces with additional info by id:
     this.workspacesById = new Map();
@@ -55,7 +57,8 @@ export class ListWorkspacesCtrl {
     this.namespaces = this.getNamespaces();
 
     this.onFilterChanged = (value :  string) => {
-      this.workspaceFilter.namespace = (value === this.ALL_NAMESPACES) ? '' : value;
+      this.namespaceFilter.namespace = (value === this.ALL_NAMESPACES) ? '' : value;
+      this.isExactMatch = (value === this.ALL_NAMESPACES) ? false : true;
     }
   }
 
