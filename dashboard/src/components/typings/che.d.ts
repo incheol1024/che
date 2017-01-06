@@ -74,6 +74,7 @@ declare namespace _che {
       [propName: string]: string;
     };
     config: IWorkspaceConfig;
+    runtime?: IWorkspaceRuntime;
   }
 
   export interface IWorkspaceConfig {
@@ -115,6 +116,38 @@ declare namespace _che {
     properties?: {
       [propName: string]: string
     };
+  }
+
+  export interface IWorkspaceRuntime {
+    activeEnv: string;
+    devMachine: IWorkspaceRuntimeMachine;
+    links: any[];
+    machines: IWorkspaceRuntimeMachine[];
+    rootFolder: string;
+  }
+
+  export interface IWorkspaceRuntimeMachine {
+    config: any;
+    envName: string;
+    id: string;
+    links: any[];
+    owner: string;
+    runtime: {
+      envVariables: { [envVarName: string]: string };
+      properties: { [propName: string]: string };
+      servers: { [serverName: string]: IWorkspaceRuntimeMachineServer };
+    };
+    status: string;
+    workspaceId: string;
+  }
+
+  export interface IWorkspaceRuntimeMachineServer {
+    address: string;
+    properties: { [propName: string]: string; };
+    protocol: string;
+    port: string;
+    ref: string;
+    url: string;
   }
 
   export interface IProject {
