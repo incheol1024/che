@@ -1,7 +1,8 @@
 <div class="workspace-edit-mode-overlay"
      layout="row" layout-align="center center">
   <div ng-if="showMessage"
-       class="workspace-edit-mode-message">{{message}}</div>
+       class="workspace-edit-mode-message"
+       ng-class="{'workspace-edit-mode-error-message': messageType==='error'}">{{message}}</div>
   <che-button-save-flat che-button-title="Save" name="saveButton"
                         ng-disabled="disableSaveButton"
                         ng-click="onSave()"></che-button-save-flat>

@@ -3,7 +3,8 @@
   <div hide-xs hide-sm ng-if="showMessage">
     <div class="workspace-edit-mode-toolbar-support">&nbsp;</div>
     <div class="workspace-edit-mode-toolbar-message-container">
-        <span class="workspace-edit-mode-toolbar-message">{{message}}</span>
+        <span class="workspace-edit-mode-toolbar-message"
+              ng-class="{'workspace-edit-mode-toolbar-error-message': messageType==='error'}">{{message}}</span>
     </div>
   </div>
   <che-button-save-flat che-button-title="Save" name="saveButton"

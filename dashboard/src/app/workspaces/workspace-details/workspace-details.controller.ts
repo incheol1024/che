@@ -58,6 +58,7 @@ export class WorkspaceDetailsController {
   invalidWorkspace: string = '';
   editMode: boolean = false;
   showApplyMessage: boolean = false;
+  showErrorMessage: boolean = false;
   workspaceNamespace: string = undefined;
   workspaceImportedRecipe: {
     type: string,
@@ -617,6 +618,27 @@ export class WorkspaceDetailsController {
     } else {
       return this.checkFormsNotValid(Tab.Settings) || this.checkFormsNotValid(Tab.Runtime);
     }
+  }
+
+  getEditModeMessage(): string {
+    if (this.isSaveButtonDisabled()) {
+      // form is invalid, show error message
+      this.showErrorMessage = true;
+
+      let tabs = [Tab.Settings, Tab.Config, Tab.Runtime];
+      // get tabid which form is invalid
+      let tabid = tabs.find((tabIndex: number) => {
+        let form = this.forms.get(tabIndex);
+        return form && form.$invalid;
+      });
+      let tabName = Tab[tabid];
+
+      return `"${tabName}" page contains the error.`;
+    }
+
+    this.showErrorMessage = false;
+
+    return 'Changes will be applied and workspace restarted';
   }
 
 }

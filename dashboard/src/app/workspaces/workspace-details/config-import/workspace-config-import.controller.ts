@@ -9,6 +9,7 @@
  *   Codenvy, S.A. - initial API and implementation
  */
 'use strict';
+import {CheErrorMessagesService} from "../../../../components/error-messages/che-error-messages.service";
 
 /**
  * @ngdoc controller
@@ -18,6 +19,7 @@
  */
 export class WorkspaceConfigImportController {
   $log: ng.ILogService;
+  cheErrorMessagesService: CheErrorMessagesService;
 
   editorOptions: {
     lineWrapping: boolean,
@@ -38,8 +40,9 @@ export class WorkspaceConfigImportController {
    * Default constructor that is using resource
    * @ngInject for Dependency injection
    */
-  constructor($log: ng.ILogService, $scope: ng.IScope, $timeout: ng.ITimeoutService) {
+  constructor($log: ng.ILogService, $scope: ng.IScope, $timeout: ng.ITimeoutService, cheErrorMessagesService: CheErrorMessagesService) {
     this.$log = $log;
+    this.cheErrorMessagesService = cheErrorMessagesService;
 
     this.editorOptions = {
       lineWrapping: true,
@@ -63,6 +66,10 @@ export class WorkspaceConfigImportController {
     }, true);
   }
 
+  getErrorMessages(): string[] {
+    return this.cheErrorMessagesService.getMessages('workspace-details');
+  }
+
   configValid(): boolean {
     return !this.validationError;
   }
@@ -81,9 +88,15 @@ export class WorkspaceConfigImportController {
     try {
       let config = angular.fromJson(this.importWorkspaceJson);
       this.validationError = this.validateConfig(config);
-      if (!this.validationError) {
-        this.newWorkspaceConfig = angular.copy(config);
+      if (this.validationError) {
+        return;
       }
+
+      this.newWorkspaceConfig = angular.copy(config);
+
+      // immediately apply config on IU
+      this.applyChanges();
+
     } catch (e) {
       this.validationError = 'JSON is invalid.';
       this.$log.error(e);

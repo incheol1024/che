@@ -21,6 +21,7 @@
  *
  * @param {string=} workspace-edit-mode-message message
  * @param {boolean=} workspace-edit-mode-show-message defines if message is visible
+ * @param {string=} workspace-edit-mode-message-type defines the type of the message
  * @callback workspace-edit-mode-on-save
  *
  * @usage
@@ -48,8 +49,9 @@ export class WorkspaceEditModeToolbarButton {
    */
   constructor () {
     this.scope = {
-      message: '@?workspaceEditModeMessage',
+      message: '=?workspaceEditModeMessage',
       showMessage: '=?workspaceEditModeShowMessage',
+      messageType: '=?workspaceEditModeMessageType',
       onSave: '&workspaceEditModeOnSave',
       disableSaveButton: '=workspaceEditDisableSaveButton'
     };

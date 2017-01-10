@@ -17,11 +17,13 @@
           <div ng-message="customValidator">{{workspaceConfigImportController.validationError}}</div>
         </che-input>
       </div>
-      <div>
-        <che-button-default che-button-title="Apply"
-                            ng-disabled="workspaceConfigImportForm.$invalid || !workspaceConfigImportController.configChanged()"
-                            ng-click="workspaceConfigImportController.applyChanges()"></che-button-default>
-      </div>
+      <div>messages:</div>
+      <div data-ng-repeat="errorMessage in workspaceConfigImportController.getErrorMessages()">{{errorMessage}}</div>
+      <!--<div>-->
+        <!--<che-button-default che-button-title="Apply"-->
+                            <!--ng-disabled="workspaceConfigImportForm.$invalid || !workspaceConfigImportController.configChanged()"-->
+                            <!--ng-click="workspaceConfigImportController.applyChanges()"></che-button-default>-->
+      <!--</div>-->
     </div>
   </ng-form>
 </div>
