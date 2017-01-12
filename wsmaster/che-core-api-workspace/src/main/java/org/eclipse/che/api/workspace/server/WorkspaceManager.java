@@ -29,7 +29,6 @@ import org.eclipse.che.api.machine.server.exception.SourceNotFoundException;
 import org.eclipse.che.api.machine.server.model.impl.SnapshotImpl;
 import org.eclipse.che.api.machine.server.spi.Instance;
 import org.eclipse.che.api.machine.server.spi.SnapshotDao;
-import org.eclipse.che.api.workspace.server.WorkspaceRuntimes.RuntimeDescriptor;
 import org.eclipse.che.api.workspace.server.event.WorkspaceCreatedEvent;
 import org.eclipse.che.api.workspace.server.model.impl.WorkspaceConfigImpl;
 import org.eclipse.che.api.workspace.server.model.impl.WorkspaceImpl;
@@ -46,8 +45,6 @@ import javax.inject.Singleton;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
-import java.util.concurrent.ExecutionException;
-import java.util.concurrent.Future;
 
 import static com.google.common.base.MoreObjects.firstNonNull;
 import static com.google.common.base.Throwables.getCausalChain;
@@ -130,10 +127,12 @@ public class WorkspaceManager {
                                                                   NotFoundException {
         requireNonNull(config, "Required non-null config");
         requireNonNull(namespace, "Required non-null namespace");
-        return normalizeState(doCreateWorkspace(config,
-                                                accountManager.getByName(namespace),
-                                                emptyMap(),
-                                                false));
+        WorkspaceImpl workspace = doCreateWorkspace(config,
+                                                    accountManager.getByName(namespace),
+                                                    emptyMap(),
+                                                    false);
+        workspace.setStatus(WorkspaceStatus.STOPPED);
+        return workspace;
     }
 
     /**
@@ -164,10 +163,12 @@ public class WorkspaceManager {
         requireNonNull(config, "Required non-null config");
         requireNonNull(namespace, "Required non-null namespace");
         requireNonNull(attributes, "Required non-null attributes");
-        return normalizeState(doCreateWorkspace(config,
-                                                accountManager.getByName(namespace),
-                                                attributes,
-                                                false));
+        WorkspaceImpl workspace = doCreateWorkspace(config,
+                                                    accountManager.getByName(namespace),
+                                                    emptyMap(),
+                                                    false);
+        workspace.setStatus(WorkspaceStatus.STOPPED);
+        return workspace;
     }
 
     /**
@@ -193,7 +194,9 @@ public class WorkspaceManager {
      */
     public WorkspaceImpl getWorkspace(String key) throws NotFoundException, ServerException {
         requireNonNull(key, "Required non-null workspace key");
-        return normalizeState(getByKey(key));
+        WorkspaceImpl workspace = getByKey(key);
+        runtimes.injectRuntime(workspace);
+        return workspace;
     }
 
     /**
@@ -215,7 +218,9 @@ public class WorkspaceManager {
     public WorkspaceImpl getWorkspace(String name, String namespace) throws NotFoundException, ServerException {
         requireNonNull(name, "Required non-null workspace name");
         requireNonNull(namespace, "Required non-null workspace owner");
-        return normalizeState(workspaceDao.get(name, namespace));
+        WorkspaceImpl workspace = workspaceDao.get(name, namespace);
+        runtimes.injectRuntime(workspace);
+        return workspace;
     }
 
     /**
@@ -259,7 +264,7 @@ public class WorkspaceManager {
         requireNonNull(namespace, "Required non-null namespace");
         final List<WorkspaceImpl> workspaces = workspaceDao.getByNamespace(namespace);
         for (WorkspaceImpl workspace : workspaces) {
-            normalizeState(workspace);
+            runtimes.injectRuntime(workspace);
         }
         return workspaces;
     }
@@ -287,12 +292,14 @@ public class WorkspaceManager {
                                                                              NotFoundException {
         requireNonNull(id, "Required non-null workspace id");
         requireNonNull(update, "Required non-null workspace update");
-        final WorkspaceImpl workspace = workspaceDao.get(id);
+        WorkspaceImpl workspace = workspaceDao.get(id);
         workspace.setConfig(new WorkspaceConfigImpl(update.getConfig()));
         update.getAttributes().put(UPDATED_ATTRIBUTE_NAME, Long.toString(currentTimeMillis()));
         workspace.setAttributes(update.getAttributes());
         workspace.setTemporary(update.isTemporary());
-        return normalizeState(workspaceDao.update(workspace));
+        WorkspaceImpl updated = workspaceDao.update(workspace);
+        runtimes.injectRuntime(updated);
+        return updated;
     }
 
     /**
@@ -359,7 +366,8 @@ public class WorkspaceManager {
         final String restoreAttr = workspace.getAttributes().get(AUTO_RESTORE_FROM_SNAPSHOT);
         final boolean autoRestore = restoreAttr == null ? defaultAutoRestore : parseBoolean(restoreAttr);
         startAsync(workspace, envName, firstNonNull(restore, autoRestore) && !getSnapshot(workspaceId).isEmpty());
-        return normalizeState(workspace);
+        runtimes.injectRuntime(workspace);
+        return workspace;
     }
 
     /**
@@ -389,7 +397,8 @@ public class WorkspaceManager {
                                                           emptyMap(),
                                                           isTemporary);
         startAsync(workspace, workspace.getConfig().getDefaultEnv(), false);
-        return normalizeState(workspace);
+        runtimes.injectRuntime(workspace);
+        return workspace;
     }
 
     /**
@@ -464,8 +473,8 @@ public class WorkspaceManager {
                                                                                            NotFoundException,
                                                                                            ServerException {
         requireNonNull(workspaceId, "Required non-null workspace id");
-        final WorkspaceImpl workspace = normalizeState(workspaceDao.get(workspaceId));
-        checkWorkspaceIsRunning(workspace, "stop");
+        final WorkspaceImpl workspace = workspaceDao.get(workspaceId);
+        workspace.setStatus(runtimes.getStatus(workspaceId));
         stopAsync(workspace, createSnapshot);
     }
 
@@ -573,7 +582,8 @@ public class WorkspaceManager {
                                                      ConflictException {
         requireNonNull(workspaceId, "Required non-null workspace id");
         requireNonNull(machineId, "Required non-null machine id");
-        final WorkspaceImpl workspace = normalizeState(workspaceDao.get(workspaceId));
+        final WorkspaceImpl workspace = workspaceDao.get(workspaceId);
+        workspace.setStatus(runtimes.getStatus(workspaceId));
         checkWorkspaceIsRunning(workspace, format("stop machine with ID '%s' of", machineId));
         runtimes.stopMachine(workspaceId, machineId);
     }
@@ -596,7 +606,7 @@ public class WorkspaceManager {
                                                                 ServerException {
         requireNonNull(workspaceId, "Required non-null workspace id");
         requireNonNull(machineId, "Required non-null machine id");
-        normalizeState(workspaceDao.get(workspaceId));
+        workspaceDao.get(workspaceId);
         return runtimes.getMachine(workspaceId, machineId);
     }
 
@@ -616,33 +626,46 @@ public class WorkspaceManager {
         workspaceDao.update(workspace);
         final String env = firstNonNull(envName, workspace.getConfig().getDefaultEnv());
 
-        // barrier, safely doesn't allow to start the workspace twice
-        final Future<RuntimeDescriptor> descriptor = runtimes.startAsync(workspace, env, recover);
-
-        sharedPool.execute(() -> {
-            try {
-                descriptor.get();
-                LOG.info("Workspace '{}:{}' with id '{}' started by user '{}'",
-                         workspace.getNamespace(),
-                         workspace.getConfig().getName(),
-                         workspace.getId(),
-                         sessionUserNameOr("undefined"));
-            } catch (Exception ex) {
-                if (workspace.isTemporary()) {
-                    removeWorkspaceQuietly(workspace);
-                }
-                for (Throwable cause : getCausalChain(ex)) {
-                    if (cause instanceof SourceNotFoundException) {
-                        return;
+        runtimes.startAsync(workspace, env, recover)
+                .whenComplete((runtime, ex) -> {
+                    if (ex == null) {
+                        LOG.info("Workspace '{}:{}' with id '{}' started by user '{}'",
+                                 workspace.getNamespace(),
+                                 workspace.getConfig().getName(),
+                                 workspace.getId(),
+                                 sessionUserNameOr("undefined"));
+                    } else {
+                        if (workspace.isTemporary()) {
+                            removeWorkspaceQuietly(workspace);
+                        }
+                        for (Throwable cause : getCausalChain(ex)) {
+                            if (cause instanceof SourceNotFoundException) {
+                                return;
+                            }
+                        }
+                        try {
+                            throw ex;
+                        } catch (EnvironmentException envEx) {
+                            // it's okay, e.g. recipe is invalid | start interrupted
+                            LOG.info("Workspace '{}:{}' can't be started because: {}",
+                                     workspace.getNamespace(),
+                                     workspace.getConfig().getName(),
+                                     envEx.getMessage());
+                        } catch (Throwable thr) {
+                            LOG.error(thr.getMessage(), thr);
+                        }
                     }
-                }
-                LOG.error(ex.getLocalizedMessage(), ex);
-            }
-        });
+                });
     }
 
     private void stopAsync(WorkspaceImpl workspace, @Nullable Boolean createSnapshot) throws ConflictException {
-        checkWorkspaceIsRunning(workspace, "stop");
+        if (workspace.getStatus() != WorkspaceStatus.RUNNING && workspace.getStatus() != WorkspaceStatus.STARTING) {
+            throw new ConflictException(format("Could not stop the workspace '%s:%s' because its status is '%s'. " +
+                                               "Workspace must be either 'STARTING' or 'RUNNING'",
+                                               workspace.getNamespace(),
+                                               workspace.getConfig().getName(),
+                                               workspace.getStatus()));
+        }
 
         sharedPool.execute(() -> {
             final String stoppedBy = sessionUserNameOr(workspace.getAttributes().get(WORKSPACE_STOPPED_BY));
@@ -686,7 +709,7 @@ public class WorkspaceManager {
                          workspace.getConfig().getName(),
                          workspace.getId(),
                          firstNonNull(stoppedBy, "undefined"));
-            } catch (RuntimeException | ConflictException | NotFoundException | ServerException ex) {
+            } catch (Exception ex) {
                 LOG.error(ex.getLocalizedMessage(), ex);
             } finally {
                 if (workspace.isTemporary()) {
@@ -734,24 +757,6 @@ public class WorkspaceManager {
             return subject.getUserName();
         }
         return nameIfNoUser;
-    }
-
-    private WorkspaceImpl normalizeState(WorkspaceImpl workspace) throws ServerException {
-        try {
-            return normalizeState(workspace, runtimes.get(workspace.getId()));
-        } catch (NotFoundException e) {
-            return normalizeState(workspace, null);
-        }
-    }
-
-    private WorkspaceImpl normalizeState(WorkspaceImpl workspace, RuntimeDescriptor descriptor) {
-        if (descriptor != null) {
-            workspace.setStatus(descriptor.getRuntimeStatus());
-            workspace.setRuntime(descriptor.getRuntime());
-        } else {
-            workspace.setStatus(WorkspaceStatus.STOPPED);
-        }
-        return workspace;
     }
 
     private WorkspaceImpl doCreateWorkspace(WorkspaceConfig config,

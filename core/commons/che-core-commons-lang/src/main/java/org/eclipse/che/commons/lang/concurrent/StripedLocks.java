@@ -12,34 +12,36 @@ package org.eclipse.che.commons.lang.concurrent;
 
 import com.google.common.util.concurrent.Striped;
 
+import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReadWriteLock;
 
 /**
  * Helper class to use striped locks in try-with-resources construction.
  * </p>
  * Examples of usage:
- * <pre class="code"><code class="java">
- *     StripedLocks stripedLocks = new StripedLocks(16);
- *     try (CloseableLock lock = stripedLocks.acquireWriteLock(myKey)) {
- *         syncedObject.write();
- *     }
+ * <pre>{@code
+ *  StripedLocks stripedLocks = new StripedLocks(16);
+ *  try (CloseableLock lock = stripedLocks.writeLock(myKey)) {
+ *      syncedObject.write();
+ *  }
  *
- *     try (CloseableLock lock = stripedLocks.acquireReadLock(myKey)) {
- *         syncedObject.read();
- *     }
+ *  try (CloseableLock lock = stripedLocks.readLock(myKey)) {
+ *      syncedObject.read();
+ *  }
  *
- *     try (CloseableLock lock = stripedLocks.acquireWriteAllLock(myKey)) {
- *         for (ObjectToSync objectToSync : allObjectsToSync) {
- *             objectToSync.write();
- *         }
- *     }
- * </pre>
+ *  try (CloseableLock lock = stripedLocks.writeAllLock(myKey)) {
+ *      for (ObjectToSync objectToSync : allObjectsToSync) {
+ *          objectToSync.write();
+ *      }
+ *  }
+ * }</pre>
  *
  * @author Alexander Garagatyi
  * @author Sergii Leschenko
+ * @author Yevhenii Voevodin
  */
-// TODO consider usage of plain map with locks instead of Guava's Striped
 public class StripedLocks {
+
     private final Striped<ReadWriteLock> striped;
 
     public StripedLocks(int stripesCount) {
@@ -49,75 +51,66 @@ public class StripedLocks {
     /**
      * Acquire read lock for provided key.
      */
-    public CloseableLock acquireReadLock(String key) {
-        return new ReadLock(key);
+    public UnLocker readLock(String key) {
+        Lock lock = striped.get(key).readLock();
+        lock.lock();
+        return new LockUnLocker(lock);
     }
 
     /**
      * Acquire write lock for provided key.
      */
-    public CloseableLock acquireWriteLock(String key) {
-        return new WriteLock(key);
+    public UnLocker writeLock(String key) {
+        Lock lock = striped.get(key).writeLock();
+        lock.lock();
+        return new LockUnLocker(lock);
     }
 
     /**
      * Acquire write lock for all possible keys.
      */
-    public CloseableLock acquireWriteAllLock() {
-        return new WriteAllLock();
+    public UnLocker writeAllLock() {
+        Lock[] locks = getAllWriteLocks();
+        for (Lock lock : locks) {
+            lock.lock();
+        }
+        return new LocksUnLocker(locks);
     }
 
-    /**
-     * Represents read lock for the provided key.
-     * Can be used as {@link AutoCloseable} to release lock.
-     */
-    private class ReadLock implements CloseableLock {
-        private String key;
+    private Lock[] getAllWriteLocks() {
+        Lock[] locks = new Lock[striped.size()];
+        for (int i = 0; i < striped.size(); i++) {
+            locks[i] = striped.getAt(i).writeLock();
+        }
+        return locks;
+    }
 
-        private ReadLock(String key) {
-            this.key = key;
-            striped.get(key).readLock().lock();
+    private static class LockUnLocker implements UnLocker {
+
+        private final Lock lock;
+
+        private LockUnLocker(Lock lock) {
+            this.lock = lock;
         }
 
         @Override
-        public void close() {
-            striped.get(key).readLock().unlock();
+        public void unlock() {
+            lock.unlock();
         }
     }
 
-    /**
-     * Represents write lock for the provided key.
-     * Can be used as {@link AutoCloseable} to release lock.
-     */
-    private class WriteLock implements CloseableLock {
-        private String key;
+    private static class LocksUnLocker implements UnLocker {
 
-        private WriteLock(String key) {
-            this.key = key;
-            striped.get(key).writeLock().lock();
+        private final Lock[] locks;
+
+        private LocksUnLocker(Lock[] locks) {
+            this.locks = locks;
         }
 
         @Override
-        public void close() {
-            striped.get(key).writeLock().unlock();
-        }
-    }
-
-    /**
-     * Represents write lock for all possible keys.
-     * Can be used as {@link AutoCloseable} to release locks.
-     */
-    private class WriteAllLock implements CloseableLock {
-        private WriteAllLock() {
-            for (int i = 0; i < striped.size(); i++) {
-                striped.getAt(i).writeLock().lock();
-            }
-        }
-
-        @Override
-        public void close() {
-            for (int i = 0; i < striped.size(); i++) {
-                striped.getAt(i).writeLock().unlock();
+        public void unlock() {
+            for (Lock lock : locks) {
+                lock.unlock();
             }
         }
     }

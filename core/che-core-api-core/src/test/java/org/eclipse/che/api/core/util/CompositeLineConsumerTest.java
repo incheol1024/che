@@ -86,7 +86,6 @@ public class CompositeLineConsumerTest {
     public Object[][] subConsumersExceptions() {
         return new Throwable[][] {
                 {new ConsumerAlreadyClosedException("Error")},
-                {new ClosedByInterruptException()}
         };
     }
 

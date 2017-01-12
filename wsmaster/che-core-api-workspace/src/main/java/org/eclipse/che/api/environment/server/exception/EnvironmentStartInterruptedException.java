@@ -8,23 +8,17 @@
  * Contributors:
  *   Codenvy, S.A. - initial API and implementation
  *******************************************************************************/
-package org.eclipse.che.commons.lang.concurrent;
+package org.eclipse.che.api.environment.server.exception;
 
 /**
- * Lock that is designed to use in try-with-resources statement.
+ * Thrown when environment start is interrupted.
  *
- * <p>Implementers should lock on instance creation
- * and unlock when {@link CloseableLock#close()} method invokes.
- *
- * @author Sergii Leschenko
+ * @author Yevhenii Voevodin
  */
-public interface CloseableLock extends AutoCloseable {
-    /**
-     * Unlocks this lock.
-     *
-     * This method is invoked automatically on objects managed by the
-     * {@code try}-with-resources statement.
-     */
-    @Override
-    void close();
+public class EnvironmentStartInterruptedException extends EnvironmentException {
+    public EnvironmentStartInterruptedException(String workspaceId, String envName) {
+        super(String.format("Start of environment '%s' in workspace '%s' is interrupted",
+                            envName,
+                            workspaceId));
+    }
 }
