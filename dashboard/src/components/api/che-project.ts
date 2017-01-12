@@ -17,11 +17,13 @@
  * @author Florent Benoit
  */
 export class CheProject {
+  $q: ng.IQService;
 
   /**
    * Default constructor that is using resource
    */
-  constructor($resource, $q, cheWebsocket, wsagentPath) {
+  constructor($resource, $q: ng.IQService, cheWebsocket, wsagentPath) {
+    this.$q = $q;
 
     // keep resource
     this.$resource = $resource;
@@ -88,6 +90,113 @@ export class CheProject {
   createProjects(projects) {
     let promise = this.remoteProjectsAPI.batchCreate(projects).$promise;
     return promise;
+  }
+
+  /**
+   * Resolve project type.
+   * @param projectData{che.IImportProject}
+   * @param projectTypesByCategory{Map<string, any>}
+   * @returns {ng.IPromise<any>}
+   */
+  resolveProjectType(projectData: che.IImportProject, projectTypesByCategory: Map<string, any>): ng.IPromise<any> {
+    let deferredResolve = this.$q.defer();
+    let projectDetails: any = projectData.project;
+    if (!projectDetails.attributes) {
+      projectDetails.source = projectData.source;
+      projectDetails.attributes = {};
+    }
+    if (projectDetails.type) {
+      let updateProjectPromise = this.updateProject(projectDetails.name, projectDetails);
+      updateProjectPromise.then(() => {
+        deferredResolve.resolve();
+      }, (error: any) => {
+        deferredResolve.reject(error);
+      });
+      return deferredResolve.promise;
+    }
+    let resolvePromise = this.fetchResolve(projectDetails.name);
+    resolvePromise.then(() => {
+      let resultResolve = this.getResolve(projectDetails.name);
+      let estimatePromises = [];
+      let estimateTypes = [];
+      resultResolve.forEach((sourceResolve: any) => {
+        // add attributes if any
+        if (sourceResolve.attributes && Object.keys(sourceResolve.attributes).length > 0) {
+          for (let attributeKey in sourceResolve.attributes) {
+            if (!sourceResolve.attributes.hasOwnProperty(attributeKey)) {
+              continue;
+            }
+            projectDetails.attributes[attributeKey] = sourceResolve.attributes[attributeKey];
+          }
+        }
+        let projectType = projectTypesByCategory.get(sourceResolve.type);
+        if (projectType.primaryable) {
+          // call estimate
+          let estimatePromise = this.fetchEstimate(projectDetails.name, sourceResolve.type);
+          estimatePromises.push(estimatePromise);
+          estimateTypes.push(sourceResolve.type);
+        }
+      });
+      if (estimateTypes.length > 0) {
+        // wait estimate are all finished
+        let waitEstimate = this.$q.all(estimatePromises);
+        let attributesByMatchingType = new Map();
+        waitEstimate.then(() => {
+          let firstMatchingType;
+          estimateTypes.forEach((type: string) => {
+            let resultEstimate = this.getEstimate(projectDetails.name, type);
+            // add attributes
+            if (Object.keys(resultEstimate.attributes).length > 0) {
+              attributesByMatchingType.set(type, resultEstimate.attributes);
+            }
+          });
+          attributesByMatchingType.forEach((attributes: any, type: string) => {
+            if (!firstMatchingType) {
+              let projectType = projectTypesByCategory.get(type);
+              if (projectType && projectType.parents) {
+                projectType.parents.forEach((parentType: string) => {
+                  if (parentType === 'java') {
+                    let additionalType = 'maven';
+                    if (attributesByMatchingType.get(additionalType)) {
+                      firstMatchingType = additionalType;
+                    }
+                  }
+                  if (!firstMatchingType) {
+                    firstMatchingType = attributesByMatchingType.get(parentType) ? parentType : type;
+                  }
+                });
+              } else {
+                firstMatchingType = type;
+              }
+            }
+          });
+          if (firstMatchingType) {
+            projectDetails.attributes = attributesByMatchingType.get(firstMatchingType);
+            projectDetails.type = firstMatchingType;
+            let updateProjectPromise = this.updateProject(projectDetails.name, projectDetails);
+            updateProjectPromise.then(() => {
+              deferredResolve.resolve();
+            }, (error: any) => {
+              // a second attempt with type blank
+              projectDetails.attributes = {};
+              projectDetails.type = 'blank';
+              this.updateProject(projectDetails.name, projectDetails).then(() => {
+                deferredResolve.resolve();
+              }, (error: any) => {
+                deferredResolve.reject(error);
+              });
+            });
+          } else {
+            deferredResolve.resolve();
+          }
+        }, (error: any) => {
+          deferredResolve.reject(error);
+        });
+      } else {
+        deferredResolve.resolve();
+      }
+    });
+    return deferredResolve.promise;
   }
 
   /**
@@ -194,14 +303,18 @@ export class CheProject {
    * @returns {Promise}
    */
   fetchResolve(projectPath) {
+    let deferred = this.$q.defer();
     let projectName = projectPath[0] === '/' ? projectPath.slice(1) : projectPath;
     let promise = this.remoteProjectsAPI.resolve({path: projectName}).$promise;
-    let parsedResultPromise = promise.then((resolve) => {
+    promise.then((resolve) => {
       if (resolve) {
         this.resolveMap.set(projectName, resolve);
       }
+      deferred.resolve(resolve);
+    }, (error) => {
+      deferred.reject(error);
     });
-    return parsedResultPromise;
+    return deferred.promise;
   }
 
   /**

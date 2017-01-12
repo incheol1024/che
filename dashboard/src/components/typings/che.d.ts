@@ -94,12 +94,14 @@ declare namespace _che {
     machines: {
       [machineName: string]: IEnvironmentMachine
     };
-    recipe: {
-      content?: string;
-      location?: string;
-      contentType: string;
-      type: string;
-    };
+    recipe: IRecipe;
+  }
+
+  export interface IRecipe {
+    content?: string;
+    location?: string;
+    contentType: string;
+    type: string;
   }
 
   export interface IEnvironmentMachine {
